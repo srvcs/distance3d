@@ -1,87 +1,90 @@
 # srvcs-distance3d
 
-Euclidean distance between two points in 3D space, for srvcs.cloud.
+## Name
 
-This is an **orchestrator** over float primitives: it owns the control flow but
-delegates every arithmetic step to its dependencies. It does **not** call
-`srvcs-isnumber` directly — input validation propagates from the dependencies
-(their `422`s are forwarded verbatim).
+| Field | Value |
+| --- | --- |
+| Service | `srvcs-distance3d` |
+| Slug | `distance3d` |
+| Repository | `srvcs/distance3d` |
+| Package | `srvcs-distance3d` |
+| Kind | `orchestrator` |
 
-## Concern
+## Function
 
-`geometry: distance between two 3D points`
-
-Given two points `(x1, y1, z1)` and `(x2, y2, z2)`, the distance is
-
-```
-sqrt((x2 - x1)^2 + (y2 - y1)^2 + (z2 - z1)^2)
-```
-
-## Algorithm
-
-Like `srvcs-distance2d` with a third axis:
-
-1. `dx = x2 - x1`, `dy = y2 - y1`, `dz = z2 - z1` via `srvcs-floatsubtract`;
-2. square each delta via `srvcs-floatmultiply`;
-3. `sum = (dx^2 + dy^2) + dz^2` by chaining two `srvcs-floatadd` calls;
-4. `result` (an `f64`) `= sqrt(sum)` via `srvcs-sqrt`.
-
-For example, `distance3d(0,0,0, 1,2,2) = 3.0`.
+geometry: distance between two 3D points
 
 ## Dependencies
 
-| Service               | Env var                   | Default                |
-| --------------------- | ------------------------- | ---------------------- |
-| `srvcs-floatsubtract` | `SRVCS_FLOATSUBTRACT_URL` | `http://127.0.0.1:8090` |
-| `srvcs-floatmultiply` | `SRVCS_FLOATMULTIPLY_URL` | `http://127.0.0.1:8091` |
-| `srvcs-floatadd`      | `SRVCS_FLOATADD_URL`      | `http://127.0.0.1:8092` |
-| `srvcs-sqrt`          | `SRVCS_SQRT_URL`          | `http://127.0.0.1:8093` |
+| Dependency | Repository |
+| --- | --- |
+| `srvcs-floatsubtract` | [srvcs/floatsubtract](https://github.com/srvcs/floatsubtract) |
+| `srvcs-floatmultiply` | [srvcs/floatmultiply](https://github.com/srvcs/floatmultiply) |
+| `srvcs-floatadd` | [srvcs/floatadd](https://github.com/srvcs/floatadd) |
+| `srvcs-sqrt` | [srvcs/sqrt](https://github.com/srvcs/sqrt) |
 
-## HTTP API
+## API
 
-### `GET /`
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/` | Service identity |
+| `POST` | `/` | Evaluate the service function |
+| `GET` | `/healthz` | Liveness probe |
+| `GET` | `/readyz` | Readiness probe |
+| `GET` | `/metrics` | Prometheus metrics |
+| `GET` | `/openapi.json` | OpenAPI document |
 
-Service identity.
+## Inputs
 
-```json
-{
-  "service": "srvcs-distance3d",
-  "concern": "geometry: distance between two 3D points",
-  "depends_on": ["srvcs-floatsubtract", "srvcs-floatmultiply", "srvcs-floatadd", "srvcs-sqrt"]
-}
-```
+| Name | Type | Required |
+| --- | --- | --- |
+| `x1` | `json` | yes |
+| `y1` | `json` | yes |
+| `z1` | `json` | yes |
+| `x2` | `json` | yes |
+| `y2` | `json` | yes |
+| `z2` | `json` | yes |
 
-### `POST /`
+## Outputs
 
-Request:
+| Name | Type |
+| --- | --- |
+| `x1` | `json` |
+| `y1` | `json` |
+| `z1` | `json` |
+| `x2` | `json` |
+| `y2` | `json` |
+| `z2` | `json` |
+| `result` | `number` |
 
-```json
-{ "x1": 0, "y1": 0, "z1": 0, "x2": 1, "y2": 2, "z2": 2 }
-```
+## Configuration
 
-Response `200`:
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SRVCS_BIND_ADDR` | `0.0.0.0:8080` | Bind address |
+| `SRVCS_ENV` | `development` | Environment label for logs |
+| `RUST_LOG` | `info,tower_http=info` | Tracing filter |
+| `SRVCS_FLOATADD_URL` | `http://127.0.0.1:8092` | Base URL for srvcs-floatadd |
+| `SRVCS_FLOATMULTIPLY_URL` | `` | Base URL for srvcs-floatmultiply |
+| `SRVCS_FLOATSUBTRACT_URL` | `` | Base URL for srvcs-floatsubtract |
+| `SRVCS_SQRT_URL` | `http://127.0.0.1:8093` | Base URL for srvcs-sqrt |
 
-```json
-{ "x1": 0, "y1": 0, "z1": 0, "x2": 1, "y2": 2, "z2": 2, "result": 3.0 }
-```
+## Error Behavior
 
-`result` is an `f64`.
+- `422` means the request could not be evaluated for the documented input shape.
+- `503` means a required dependency was unavailable or returned an unexpected response.
+- Dependency validation errors are forwarded when this service delegates validation.
 
-Error responses:
-
-- `422` — a dependency rejected an input (forwarded from the dependency).
-- `500` — a dependency returned a malformed (non-numeric) `result`.
-- `503` — a dependency is unavailable (`{"error", "dependency"}`).
-
-## Local checks
+## Local Checks
 
 ```sh
-nix flake check -L
-nix develop -c sh -euc 'cargo fmt --check; cargo clippy --all-targets -- -D warnings; cargo test'
-nix build .#default -L
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
 ```
 
-The Linux container is exposed as `.#container`.
+See the [srvcs service standard](https://github.com/srvcs/platform/blob/main/STANDARD.md) for the full operational contract.
 
-See [`srvcs/platform`](https://github.com/srvcs/platform) for the shared service
-standard and CI workflow.
+## Metadata
+
+Machine-readable service metadata lives in `srvcs.yaml`. Keep it aligned with this README when the service contract changes.
